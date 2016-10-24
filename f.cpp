@@ -443,26 +443,7 @@ double get_CSA(vector <Point> &region, vector<vector<description> > &KeyPoints, 
 	double t  = (double)CSA * 1.0;
 	return t;
 }
-///////////////////////////////////////////////////////
-//Removing false +ve
-///////////////////////////////////
 
-double find_in_GT(Rect A,vector <Rect> &GT_bounding_box)
-{
-	
-	for(int i = 0; i < GT_bounding_box.size(); i++)
-	{
-		
-		Rect intersect_rect = A&GT_bounding_box[i];
-		Rect total_rect = A|GT_bounding_box[i];
-		double area_intersect = intersect_rect.area();
-		double total_area = total_rect.area();
-		if(area_intersect/total_area >= 0.5)
-			return 1.0;
-
-	}
-	return -1.0;
-}
 double Deviation(vector<float> v, double ave)
 {
     double E=0;
@@ -472,92 +453,6 @@ double Deviation(vector<float> v, double ave)
         E += pow(static_cast<double>(v[i]) - ave, 2);
     }
     return sqrt(inverse * E);
-}
-double stroke_width_filter(Mat &image,   vector <Point>  &R)
-{
-	vector <vector <Point> > r;
-	r.push_back(R);
-	int borderType = BORDER_CONSTANT;
-	vector<Mat> regions;
-    for(int i = 0; i < r.size(); i++)
-    {
-		Mat matROI = Mat(r[i]);
-		Rect roi = boundingRect(r[i]);
-        Mat mask = Mat::zeros(image.size(), CV_8UC1);
-        drawContours(mask, r, i, Scalar(255), CV_FILLED);
-        Mat contourRegion;
-        Mat imageROI;
-        image.copyTo(imageROI, mask);
-        contourRegion = imageROI(roi);
-		//Mat contourRegion = Mat(r[i]);
-                //threshold(contourRegion,contourRegion, 127, 1, THRESH_BINARY);
-        copyMakeBorder(contourRegion,contourRegion,1,1,1,1,borderType,Scalar(0));
-        regions.push_back(contourRegion);
-		
-	}
-	vector<Mat> strokeWidthFilterIdx;
-	double strokeWidthThreshold = 0.65;
-	for(int i = 0; i < regions.size(); i++)
-	{
-		Mat img = regions[i];
-		//Mat negation_region_1;
-		Mat distanceImage_1;
-		Mat img_gray;
-		Mat img_bin;
-		cvtColor(img, img_gray,CV_RGB2GRAY);
-		threshold (img_gray, img_bin, 127, 255, CV_THRESH_BINARY);
-		cv::Mat negation_region_1 =  cv::Scalar::all(255) - img_bin;
-		distanceTransform(img_bin, distanceImage_1, CV_DIST_L2, 3);
-		cvtColor(img, img,CV_RGB2GRAY);
-		threshold(img, img, 127, 1, THRESH_BINARY);
-		Mat skel(distanceImage_1.size(), CV_8UC1, Scalar(0));
-		Mat temp(distanceImage_1.size(), CV_8UC1);
-		Mat element = getStructuringElement(MORPH_CROSS, cv::Size(3, 3));
-		bool done;
-		do
-		{
-		  cv::morphologyEx(img_bin, temp, cv::MORPH_OPEN, element);
-          cv::bitwise_not(temp, temp);
-          cv::bitwise_and(img_bin, temp, temp);
-          cv::bitwise_or(skel, temp, skel);
-          cv::erode(img_bin, img_bin, element);
-
-		  double max;
-		  cv::minMaxLoc(img_bin, 0, &max);
-		  done = (max == 0);
-		} 
-		while (!done);
-		vector<float> strokeWidthValues;
-		Mat test;
-	    vector<cv::Point> locations;
-	    
-	    cv::findNonZero(skel, locations);
-		Mat testContour = Mat(r[i]);	
-	        vector<Point> skel_regions;
-		for(int row = 0; row < skel.rows; row++)
-        {
-            for(int col = 0; col < skel.cols; col++)
-            {
-                cv::Scalar intensity = skel.at<uchar>(row,col);
-                    if(intensity[0])
-                    {       			
-                        strokeWidthValues.push_back(distanceImage_1.at<float>(row,col));
-                    }
-            }
-        }
-
-        if(!strokeWidthValues.size())
-        	continue;
-	    //imshow("skel",skel);
-	    double sum = std::accumulate(strokeWidthValues.begin(), strokeWidthValues.end(), 0.0);
-        double mean = sum / strokeWidthValues.size();
-		//cv::bitwise_and(distanceImage_1,skel,test);
-	    double stdev = Deviation(strokeWidthValues,mean);
-	    //cout<<" nan ckeck Std/mean "<<stdev/mean<<" and mean "<<mean<<" std "<<stdev<<endl;
-	    return stdev/mean;
-
-	}
-
 }
 
 ///////////////////////////////////
@@ -612,7 +507,7 @@ void calculate_properties(vector <vector < Point > > &r,vector <region_propertie
         	zzz[j] = region_property[j];
         Mat m(1,6,CV_32FC1,zzz);
     	float a = adatree.predict(m);
-    	cout << "a = " << a << "\n";
+    	//cout << "a = " << a << "\n";
     	if(a > 0)    
         	r2.push_back(t);
         
@@ -697,12 +592,12 @@ int main(int argc, char const *argv[])
     string INP_STR (INPUT_FILE);
     adatree.load("./working.xml");
     int start,end;
-    start = 0; end = 3;
+    start = 0; end = 6;
     cout << im.rows << "\n";
     if(im.cols > 2000 || im.rows > 2000)
     {
     	start = 4;
-    	end = 6;
+    	end = 7;
     }
 	for(int ii = start; ii < end; ii++)
 	{
@@ -732,15 +627,14 @@ int main(int argc, char const *argv[])
 		cout << "Done floodfill\n";
 		vector <vector < Point > > regions2;
 		euler_number(bwimg,regions,regions2);
-		//cout << regions2.size() << "\n";
 		int mul1,mul2;
 		mul1 = pow(8,ii);mul2 = pow(5,ii);
 		calculate_properties(regions2,property_vector, KeyPoints, bwimg,mul1,mul2);
 	}
 	Mat img4;
 	im.copyTo(img4);
-	cout << "size = " << property_vector.size() << "\n";
-	cout << property_vector.size() << "\n";
+	//cout << "size = " << property_vector.size() << "\n";
+	//cout << property_vector.size() << "\n";
 	for(int i = 0; i < property_vector.size(); i++)
 	{
 		
@@ -748,10 +642,8 @@ int main(int argc, char const *argv[])
 		rectangle( img4, property_vector[i].bounding_box.tl(), property_vector[i].bounding_box.br(), color, 2, 8, 0 );
 	}
 
-	namedWindow("test", WINDOW_AUTOSIZE);
+	namedWindow("test", WINDOW_NORMAL);
 	imshow("test",img4);
 	waitKey(0);
-	//cout << OUTPUT_FILE << "\n";
-	//myfile.close();
 	return 0;
 }
